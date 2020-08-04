@@ -1,4 +1,5 @@
-﻿using Discord;
+﻿using BluBotCore.Global;
+using Discord;
 using Discord.WebSocket;
 using System;
 using System.Collections.Concurrent;
@@ -6,37 +7,40 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BluBotCore.Handlers
+namespace BluBotCore.Handlers.Discord
 {
     public class ClientHandler
     {
         private readonly DiscordSocketClient _client;
-        private readonly IServiceProvider _service;
-        public ClientHandler(IServiceProvider service, DiscordSocketClient client)
+        public ClientHandler(DiscordSocketClient client)
         {
             _client = client;
-            _service = service;
 
-            _client.Ready += _client_Ready;
+
+            _client.Ready += Client_Ready;
         }
 
-        private async Task _client_Ready()
+        private async Task Client_Ready()
         {
             LoadCustomCmdFile();
             await _client.SetStatusAsync(UserStatus.Online);
-            await _client.SetGameAsync("WYKTV Monitoring");
-
+            if (Version.Build == BuildType.WYK.Value)
+            {
+                await _client.SetGameAsync("WYKTV Monitoring");
+            }
+            else if (Version.Build == BuildType.OBG.Value)
+            {
+                await _client.SetGameAsync("is OBG Live?");
+            }
         }
 
         private void LoadCustomCmdFile()
         {
-            string time = DateTime.Now.ToString("HH:MM:ss");
             string filename = "customcmds.txt";
             if (File.Exists(filename))
             {
                 ConcurrentDictionary<string, string> tmpList = new ConcurrentDictionary<string, string>();
                 string dataNew;
-                Console.WriteLine($"{time} Setup       File {filename} exists!");
                 using (StreamReader file = new StreamReader(filename))
                 {
                     while ((dataNew = file.ReadLine()) != null)
@@ -47,18 +51,17 @@ namespace BluBotCore.Handlers
                     }
                     file.Close();
                 }
-                CustomCommands.customCommands = tmpList;
-                Console.WriteLine($"{time} Setup       File {filename} loaded!");
+                CustomCommandsHandler.customCommands = tmpList;
+                Console.WriteLine($"{Globals.CurrentTime} Setup       File {filename} loaded!");
             }
             else
             {
-                Console.WriteLine($"{time} Setup       File {filename} does not exist!");
                 using (StreamWriter file = new StreamWriter(filename, true, Encoding.UTF8))
                 {
                     file.Flush();
                     file.Close();
                 }
-                Console.WriteLine($"{time} Setup       File {filename} has been created!");
+                Console.WriteLine($"{Globals.CurrentTime} Setup       File {filename} has been created!");
             }
         }
     }

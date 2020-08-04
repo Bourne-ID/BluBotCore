@@ -1,77 +1,68 @@
 ﻿using BluBotCore.Other;
 using Discord;
-using Discord.Commands;
 using Discord.Rest;
 using Discord.WebSocket;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using Tweetinvi;
-using Tweetinvi.Parameters;
 using TwitchLib.Api;
-using TwitchLib.Api.Exceptions;
-using TwitchLib.Api.Models.v5.Teams;
-using TwitchLib.Api.Models.v5.Channels;
+using TwitchLib.Api.Core.Exceptions;
+using TwitchLib.Api.V5.Models.Channels;
+using TwitchLib.Api.V5.Models.Teams;
 using TwitchLib.Api.Services;
 using TwitchLib.Api.Services.Events.LiveStreamMonitor;
+using BluBotCore.Global;
 
 namespace BluBotCore.Services
 {
     public class LiveMonitor
     {
         #region Private Variables
+
+            /// <summary> Discord Client instance </summary>
             private readonly DiscordSocketClient _client;
-            private readonly CommandService _commands;
-            private readonly IServiceProvider _service;
 
-            private static DateTime _onlineTime;
-            private static string _twitterURL = "";
+            /// <summary> Time the bot comes online. This is used to not tweet / @everyone current online streamers on load. </summary>
+            private static DateTime _botOnlineTime;
 
-            #region Lists
-                private static List<string> _chansName = new List<string>();
-                private static List<string> _chansID = new List<string>();
-            #endregion
+            static DateTime LastTeamCheck;
+            /// <summary> Dictionary of all the live discord messages. Concurrent since this can be added/removed from at anytime. </summary>
+            public static ConcurrentDictionary<string, Tuple<RestUserMessage,string,string,int>> _liveEmbeds = new ConcurrentDictionary<string, Tuple<RestUserMessage,string,string,int>>();
 
-            #region Dictionaries
-                private static ConcurrentDictionary<string, Tuple<RestUserMessage, string, string>> _sepliveEmbeds = new ConcurrentDictionary<string, Tuple<RestUserMessage, string, string>>();
-                private static ConcurrentDictionary<string, Tuple<RestUserMessage,string,string>> _liveEmbeds = new ConcurrentDictionary<string, Tuple<RestUserMessage,string,string>>();
-        #endregion
-        #endregion
-
-        #region Public Variables
-        public static Dictionary<string, ulong> sepServerList = new Dictionary<string, ulong>();
         #endregion
 
         #region Properties
 
-        public LiveStreamMonitor Monitor { get; private set; }
-        public TwitchAPI API { get; private set; }
-        public List<String> ChansName { get => _chansName; }
-        public List<String> ChansID { get => _chansID; }
+            /// <summary> Live Monitor Instance. </summary>
+            public LiveStreamMonitorService Monitor { get; private set; }
+
+            /// <summary> Twitch API Instance. </summary>
+            public TwitchAPI API { get; private set; }
+
+            /// <summary> Dictionary of all the current monitored channels. </summary>
+            public static Dictionary<String, String> MonitoredChannels { get; } = new Dictionary<string, string>();
+
         #endregion
 
-        public LiveMonitor(IServiceProvider service, DiscordSocketClient client, CommandService commands)
+        /// <summary> Constructor. Injects Dicord Client instance. Starts Live Monitor configuration. </summary>
+        /// <param name="client"></param>
+        public LiveMonitor(DiscordSocketClient client)
         {
             _client = client;
-            _service = service;
-            _commands = commands;
 
             Task.Run(() => ConfigLiveMonitorAsync());
         }
 
+        /// <summary> Live Monitor configuration. </summary>
         private async Task ConfigLiveMonitorAsync()
         {
-            var time = DateTime.Now.ToString("HH:MM:ss");
-            Console.WriteLine($"{time} Monitor     Checking if Discord is connected!");
+            // Ensure Discord is connected before config continues. Loop every 2 seconds till online.
             while (_client.ConnectionState != ConnectionState.Connected)
             {
-                var timeWait = DateTime.Now.ToString("HH:MM:ss");
-                Console.WriteLine($"{timeWait} Monitor     Waiting 2 seconds.");
                 await Task.Delay(2000);
             }
             try
@@ -79,53 +70,65 @@ namespace BluBotCore.Services
                 API = new TwitchAPI();
                 try
                 {
+                    // Set Credentials in Twitch API Config.
                     API.Settings.ClientId = AES.Decrypt(Cred.TwitchAPIID);
-                    API.Settings.AccessToken = AES.Decrypt(Cred.TwitchAPIToken);
+                    API.Settings.Secret = AES.Decrypt(Cred.TwitchAPISecret);
                 }
                 catch (Exception ex)
                 {
+                    // Token Expired Refresh Sequence.
                     if (ex is TokenExpiredException)
                     {
-                        var mahsaap = _client.GetUser(Constants.Discord.Mahsaap) as IUser;
+                        var mahsaap = (_client.GetUser(DiscordIDs.Mahsaap) as IUser);
                         await mahsaap.SendMessageAsync("TwitchLib token has expired.");
-                        var token = await API.Auth.v5.RefreshAuthTokenAsync(
-                            AES.Decrypt(Cred.TwitchAPIRefreshToken), AES.Decrypt(Cred.TwitchAPIToken), AES.Decrypt(Cred.TwitchAPIID));
+
+                        // Refresh Token
+                        var token = await API.V5.Auth.RefreshAuthTokenAsync(
+                            AES.Decrypt(Cred.TwitchAPIRefreshToken), AES.Decrypt(Cred.TwitchAPISecret), AES.Decrypt(Cred.TwitchAPIID));
                         await mahsaap.SendMessageAsync("TwitchLib token has been refreshed.");
-                        string dataOld;
+
+                        // Grab old credentials from file.
                         List<string> tmpList = new List<string>();
                         using (StreamReader file = new StreamReader("init.txt"))
                         {
+                            string dataOld;
                             while ((dataOld = file.ReadLine()) != null)
                                 tmpList.Add(dataOld);
                             file.Close();
                         }
+
+                        // Set new credentials to file.
                         tmpList[2] = AES.Encrypt(token.AccessToken);
-                        Cred.TwitchAPIToken = AES.Encrypt(token.AccessToken);
+                        Cred.TwitchAPISecret = AES.Encrypt(token.AccessToken);
                         tmpList[3] = AES.Encrypt(token.RefreshToken);
                         Cred.TwitchAPIRefreshToken = AES.Encrypt(token.RefreshToken);
+
+                        // Save (overwrite) the file.
                         File.WriteAllLines("init.txt", tmpList);
+
                         await mahsaap.SendMessageAsync($"TwitchLib keys have been updated in file. Expires in {token.ExpiresIn}.");
 
+                        // Set Credentials in Twitch API Config.
                         API.Settings.ClientId = AES.Decrypt(Cred.TwitchAPIID);
-                        API.Settings.AccessToken = AES.Decrypt(Cred.TwitchAPIToken);
-                        Console.WriteLine($"{time} Monitor     Tokens have been refreshed,updated and started");
-
+                        API.Settings.AccessToken = AES.Decrypt(Cred.TwitchAPISecret);
+                        Console.WriteLine($"{Globals.CurrentTime} Monitor     Tokens have been refreshed and updated!");
                     }
                 }
 
-                Monitor = new LiveStreamMonitor(API, 120, invokeEventsOnStart: false);
+                Monitor = new LiveStreamMonitorService(API, 300);
 
-                Console.WriteLine($"{time} Monitor     Instance Created");
+                Console.WriteLine($"{Globals.CurrentTime} Monitor     Instance Created");
 
                 await SetCastersAsync();
 
-                Monitor.OnStreamOnline += _monitor_OnStreamOnline;
-                Monitor.OnStreamMonitorStarted += _monitor_OnStreamMonitorStarted;
-                Monitor.OnStreamsSet += _monitor_OnStreamsSet;
-                Monitor.OnStreamOffline += _monitor_OnStreamOffline;
-                Monitor.OnStreamUpdate += _monitor_OnStreamUpdate;
+                // Events
+                Monitor.OnStreamOnline += Monitor_OnStreamOnlineAsync;
+                Monitor.OnStreamOffline += Monitor_OnStreamOfflineAsync;
+                Monitor.OnStreamUpdate += Monitor_OnStreamUpdateAsync;
+                Monitor.OnServiceStarted += Monitor_OnServiceStartedAsync;
+                Monitor.OnChannelsSet += Monitor_OnChannelsSet;
 
-                Monitor.StartService(); //Keep at the end!
+                Monitor.Start();
 
                 await Task.Delay(-1);
             }
@@ -135,129 +138,229 @@ namespace BluBotCore.Services
             }
         }
 
-        private async void _monitor_OnStreamOnline(object sender, OnStreamOnlineArgs e)
+        private async void Monitor_OnStreamOnlineAsync(object sender, OnStreamOnlineArgs e)
         {
-            string url = @"https://www.twitch.tv/" + e.Stream.Channel.Name;
-            EmbedBuilder eb = SetupLiveEmbed($":link: {e.Stream.Channel.DisplayName}", $"{e.Stream.Channel.Status}", $"{e.Stream.Channel.Game}",
-                e.Stream.Preview.Medium + Guid.NewGuid().ToString(), e.Stream.Channel.Logo, url);
+            try
+            {
+                var ee = await API.V5.Streams.GetStreamByUserAsync(e.Channel);
 
-            string time = DateTime.Now.ToString("HH:MM:ss");
-            Console.WriteLine($"{time} Monitor     {e.Stream.Channel.DisplayName} is live playing {e.Stream.Game}");
+                if (Version.Build == BuildType.OBG.Value)
+                {
+                    if (_liveEmbeds.ContainsKey(e.Channel) && _client.ConnectionState == ConnectionState.Connected)
+                    {
+                        RestUserMessage embed = _liveEmbeds[e.Channel].Item1;
+                        await embed.DeleteAsync();
+                        _ = _liveEmbeds.TryRemove(e.Channel, out _);
+                    }
+                }
+                if (!_liveEmbeds.ContainsKey(ee.Stream.Channel.Id) && _client.ConnectionState == ConnectionState.Connected)
+                {
+                    string url = @"https://www.twitch.tv/" + ee.Stream.Channel.Name;
+                    EmbedBuilder eb = SetupLiveEmbed($":link: {ee.Stream.Channel.DisplayName}", ee.Stream.Channel.Status, ee.Stream.Channel.Game,
+                        ee.Stream.Preview.Medium + Guid.NewGuid(), ee.Stream.Channel.Logo, url, ee.Stream.Viewers);
 
-            string twitterTag = FindTwitterTag(e.Stream.Channel.DisplayName);
+                    Console.WriteLine($"{Globals.CurrentTime} Monitor     {ee.Stream.Channel.DisplayName} is live playing {ee.Stream.Game}");
 
-            //await TweetMessageAsync($"{e.Stream.Channel.DisplayName} is live playing {e.Stream.Game}! {e.Stream.Channel.Url} {twitterTag}#WYKTV", e.Stream.Preview.Medium + Guid.NewGuid().ToString(), e.Stream.Channel.Name.ToLower());
-
-            await SetupEmbedMessageAsync(eb, e, null, _twitterURL);
-
-            _twitterURL = "";
+                    await Task.Delay(1000);
+                    await SetupEmbedMessageAsync(eb, ee, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
         }
 
-        private async void _monitor_OnStreamUpdate(object sender, OnStreamUpdateArgs e)
+        private async void Monitor_OnStreamOfflineAsync(object sender, OnStreamOfflineArgs e)
         {
-            if (_liveEmbeds.ContainsKey(e.ChannelId))
+            try
+            {
+                var ee = await API.V5.Channels.GetChannelByIDAsync(e.Channel);
+                Console.WriteLine($"{Globals.CurrentTime} Monitor     {ee.DisplayName} is offline");
+
+                if (_liveEmbeds.ContainsKey(e.Channel) && _client.ConnectionState == ConnectionState.Connected)
+                {
+                    if (Version.Build == BuildType.OBG.Value)
+                    {
+                        RestUserMessage embed = _liveEmbeds[e.Channel].Item1;
+                        string text = "**No, OverBoredGaming is not live!**\n" +
+                            "But you can check out the rest of the WYK Team!\n" +
+                            "<https://www.twitch.tv/team/wyktv>";
+                        await embed.ModifyAsync(x => x.Content = text);
+                        await Task.Delay(250);
+                        await embed.ModifyAsync(x => x.Embed = null);
+                    }
+                    if (Version.Build == BuildType.WYK.Value)
+                    {
+                        await Task.Delay(250);
+                        RestUserMessage embed = _liveEmbeds[e.Channel].Item1;
+                        await embed.DeleteAsync();
+                        _ = _liveEmbeds.TryRemove(e.Channel, out _);
+                        // Console.WriteLine($"{Global.CurrentTime} Monitor     TryParse OutResult: {outResult}");
+                    }
+
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+
+        private async void Monitor_OnStreamUpdateAsync(object sender, OnStreamUpdateArgs e)
+        {
+            if (Version.Build == BuildType.WYK.Value)
+            {
+                if (DateTime.Now > LastTeamCheck.AddDays(1))
+                {
+                    try
+                    {
+                        var teamTemp = await API.V5.Teams.GetTeamAsync("wyktv");
+                        // Check Team Count
+                        if (teamTemp.Users.Length != MonitoredChannels.Count)
+                        {
+                            await UpdateMonitorAsync();
+                            return;
+                        }
+                        else
+                        {
+                            // Check Name Change
+                            int count = 0;
+                            var result = MonitoredChannels.Where(p => teamTemp.Users.All(p2 => p2.Id != p.Value));
+                            foreach (var r in result)
+                            {
+                                count++;
+                            }
+                            if (count > 0)
+                            {
+                                await UpdateMonitorAsync();
+                                return;
+                            }
+                        }
+                        LastTeamCheck = DateTime.Now;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.ToString());
+                    }
+                }
+            }
+
+            var ee = await API.V5.Streams.GetStreamByUserAsync(e.Channel);
+
+            if (_liveEmbeds.ContainsKey(e.Channel))
             {
                 if (_client.ConnectionState == ConnectionState.Connected)
                 {
                     if (Setup.DiscordAnnounceChannel == 0) return;
-                    var msg = _liveEmbeds[e.ChannelId];
-                    if (msg.Item2 != e.Stream.Channel.Status || msg.Item3 != e.Stream.Channel.Game)
+                    if (Version.Build == BuildType.OBG.Value)
                     {
-                        EmbedBuilder eb = SetupLiveEmbed($":link: {e.Stream.Channel.DisplayName}", $"{e.Stream.Channel.Status}", $"{e.Stream.Channel.Game}",
-                            e.Stream.Preview.Medium + Guid.NewGuid().ToString(), e.Stream.Channel.Logo, @"https://www.twitch.tv/" + e.Stream.Channel.Name);
+                        if (_liveEmbeds[e.Channel].Item1.Embeds.Count == 0) return;
+                    }
+                    var msg = _liveEmbeds[e.Channel];
+                    if (msg.Item2 != ee.Stream.Channel.Status || msg.Item3 != ee.Stream.Channel.Game || msg.Item4 != ee.Stream.Viewers)
+                    {
+                        EmbedBuilder eb = SetupLiveEmbed($":link: {ee.Stream.Channel.DisplayName}", $"{ee.Stream.Channel.Status}", $"{ee.Stream.Channel.Game}",
+                            ee.Stream.Preview.Medium + Guid.NewGuid().ToString(), ee.Stream.Channel.Logo, @"https://www.twitch.tv/" + ee.Stream.Channel.Name, ee.Stream.Viewers);
 
                         await UpdateNotificationAsync(eb, _liveEmbeds, e);
-                        await Task.Delay(500);
-                        await UpdateNotificationAsync(eb, _sepliveEmbeds, e);
 
-                        string time = DateTime.Now.ToString("HH:MM:ss");
-                        Console.WriteLine($"{time} Monitor     Stream {e.Channel} updated");
+                        Console.WriteLine($"{Globals.CurrentTime} Monitor     Stream {ee.Stream.Channel.DisplayName} updated");
+                        await Task.Delay(500);
                     }
                 }
             }
         }
 
-        private async Task UpdateNotificationAsync(EmbedBuilder eb, ConcurrentDictionary<string, Tuple<RestUserMessage, string, string>> lst, OnStreamUpdateArgs e)
+        private async void Monitor_OnServiceStartedAsync(object sender, TwitchLib.Api.Services.Events.OnServiceStartedArgs e)
         {
-            if (lst.ContainsKey(e.ChannelId))
-            {
-                var msg = lst[e.ChannelId];
-                await msg.Item1.ModifyAsync(x => x.Embed = eb.Build());
-                lst[e.ChannelId] = new Tuple<RestUserMessage, string, string>(msg.Item1, e.Stream.Channel.Status, e.Stream.Channel.Game);
-            }
-        }
+            _botOnlineTime = DateTime.Now;
 
-        private async void _monitor_OnStreamOffline(object sender, OnStreamOfflineArgs e)
-        {
-            string time = DateTime.Now.ToString("HH:MM:ss");
-            Console.WriteLine($"{time} Monitor     {e.Channel} is offline");
-
-            await StreamOfflineAsync(_liveEmbeds, e, 250);
-            await StreamOfflineAsync(_sepliveEmbeds, e, 500);
-
-        }
-
-        private async Task StreamOfflineAsync(ConcurrentDictionary<string, Tuple<RestUserMessage, string, string>> lst, OnStreamOfflineArgs e, int delay)
-        {
-            if (lst.ContainsKey(e.ChannelId))
-            {
-                await Task.Delay(delay);
-                RestUserMessage embed = lst[e.ChannelId].Item1;
-                await DeleteEmbed(embed);
-                lst.TryRemove(e.ChannelId, out Tuple<RestUserMessage, string, string> outResult);
-            }
-        }
-
-        private void _monitor_OnStreamsSet(object sender, OnStreamsSetArgs e)
-        {
-            string time = DateTime.Now.ToString("HH:MM:ss");
-            Console.WriteLine($"{time} Monitor     Streams Set!");
-        }
-
-        private async void _monitor_OnStreamMonitorStarted(object sender, OnStreamMonitorStartedArgs e)
-        {
-            _onlineTime = DateTime.Now;
-            _twitterURL = "";
-            string time = DateTime.Now.ToString("HH:MM:ss");
-            Console.WriteLine($"{time} Monitor     Started");
+            Console.WriteLine($"{Globals.CurrentTime} Monitor     Started");
             _liveEmbeds.Clear();
-            _sepliveEmbeds.Clear();
-
-            if (_client.ConnectionState == ConnectionState.Connected)
+            try
             {
-                if (Setup.DiscordAnnounceChannel == 0) return;
-                var chan = _client.GetChannel(Setup.DiscordAnnounceChannel) as SocketTextChannel;
+                var livestreamers = await API.V5.Streams.GetLiveStreamsAsync(Monitor.ChannelsToMonitor);
 
-                var messages = await chan.GetMessagesAsync().FlattenAsync();
-                if (messages.Count() != 0) await chan.DeleteMessagesAsync(messages);
-
-                foreach (var sepServer in sepServerList)
+                if (_client.ConnectionState == ConnectionState.Connected)
                 {
-                    var sepChan = _client.GetChannel(sepServer.Value) as SocketTextChannel;
-                    var sapMes = await sepChan.GetMessagesAsync().FlattenAsync();
-                    if (sapMes.Count() != 0) await sepChan.DeleteMessagesAsync(sapMes);
+                    if (Setup.DiscordAnnounceChannel == 0) return;
+                    var chan = _client.GetChannel(Setup.DiscordAnnounceChannel) as SocketTextChannel;
+
+                    var messages = await chan.GetMessagesAsync().FlattenAsync();
+                    try
+                    {
+                        if (messages.Count() != 0) await chan.DeleteMessagesAsync(messages);
+                    }
+                    catch
+                    {
+                        foreach (var mes in messages)
+                        {
+                            await Task.Delay(500);
+                            await mes.DeleteAsync();
+                        }
+                    }
+
+                    foreach (var x in livestreamers.Streams)
+                    {
+                        var xx = await API.V5.Streams.GetStreamByUserAsync(x.Channel.Id);
+                        EmbedBuilder eb = SetupLiveEmbed($":link: {xx.Stream.Channel.DisplayName}", xx.Stream.Channel.Status, xx.Stream.Channel.Game,
+                        xx.Stream.Preview.Medium + Guid.NewGuid().ToString(), xx.Stream.Channel.Logo, @"https://www.twitch.tv/" + xx.Stream.Channel.Name, xx.Stream.Viewers);
+
+                        Console.WriteLine($"{Globals.CurrentTime} Monitor     {xx.Stream.Channel.DisplayName} is live playing {xx.Stream.Game}");
+                        await Task.Delay(1000);
+                        await SetupEmbedMessageAsync(eb, null, xx.Stream);
+                    }
+
+                    if (Version.Build == BuildType.OBG.Value && livestreamers.Streams.Length == 0)
+                    {
+                        var id = (await API.Helix.Users.GetUsersAsync(logins: new List<string> { "overboredgaming" })).Users[0].Id;
+                        string text = "**No, OverBoredGaming is not live!**\n" +
+                            "But you can check out the rest of the WYK Team!\n" +
+                            "<https://www.twitch.tv/team/wyktv>";
+                        RestUserMessage msg = await chan.SendMessageAsync(text);
+                        _liveEmbeds.TryAdd(id, new Tuple<RestUserMessage, string, string, int>(msg, "", "", 0));
+                        await Task.CompletedTask;
+                    }
                 }
 
-                foreach (var x in Monitor.CurrentLiveStreams)
-                {
-                    EmbedBuilder eb = SetupLiveEmbed($":link: {x.Channel.DisplayName}", $"{x.Channel.Status}", $"{x.Channel.Game}",
-                    x.Preview.Medium + Guid.NewGuid().ToString(), x.Channel.Logo, @"https://www.twitch.tv/" + x.Channel.Name);
-
-                    Console.WriteLine($"{time} Monitor     {x.Channel.DisplayName} is live playing {x.Game}");
-                    await Task.Delay(1000);
-                    await SetupEmbedMessageAsync(eb, null, x, "");
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
 
-        private async Task DeleteEmbed(RestUserMessage msg)
+        private void Monitor_OnChannelsSet(object sender, TwitchLib.Api.Services.Events.OnChannelsSetArgs e)
         {
-            if (_client.ConnectionState == ConnectionState.Connected)
-                await msg.DeleteAsync();
+            Console.WriteLine($"{Globals.CurrentTime} Monitor     Streams Set!");
         }
 
-        private EmbedBuilder SetupLiveEmbed(string title, string description, string value, string image, string thumbnail, string url)
+        private async Task UpdateNotificationAsync(EmbedBuilder eb, ConcurrentDictionary<string, Tuple<RestUserMessage, string, string, int>> lst, OnStreamUpdateArgs e)
         {
+            try
+            {
+                var ee = await API.V5.Streams.GetStreamByUserAsync(e.Channel);
+                if (lst.ContainsKey(e.Channel))
+                {
+                    var msg = lst[e.Channel];
+                    await msg.Item1.ModifyAsync(x => x.Embed = eb.Build());
+                    lst[e.Channel] = new Tuple<RestUserMessage, string, string, int>(msg.Item1, ee.Stream.Channel.Status, ee.Stream.Channel.Game, ee.Stream.Viewers);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+
+        private EmbedBuilder SetupLiveEmbed(string title, string description, string game, string image, string thumbnail, string url, int vCount)
+        {
+
+            title = Globals.NullEmptyCheck(title);
+            description = Globals.NullEmptyCheck(description);
+            game = Globals.NullEmptyCheck(game);
+
             EmbedBuilder eb = new EmbedBuilder()
             {
                 Color = new Discord.Color(51, 102, 153),
@@ -268,8 +371,14 @@ namespace BluBotCore.Services
             eb.AddField(x =>
             {
                 x.Name = $"Playing";
-                x.Value = value;
-                x.IsInline = false;
+                x.Value = game;
+                x.IsInline = true;
+            });
+            eb.AddField(x =>
+            {
+                x.Name = $"Viewer Count";
+                x.Value = vCount;
+                x.IsInline = true;
             });
             eb.WithImageUrl(image);
             eb.WithThumbnailUrl(thumbnail);
@@ -281,141 +390,199 @@ namespace BluBotCore.Services
             return eb;
         }
 
-        public async Task SetCastersAsync()
+        private async Task SetCastersAsync()
         {
-            //Team team = await API.Teams.v5.GetTeamAsync("wyktv");
-
-            //foreach (Channel user in team.Users)
-            //{
-            //    _chansName.Add(user.Name);
-            //    _chansID.Add(user.Id);
-            //}
-            //Monitor.SetStreamsByUserId(_chansID);
-
-
-            //Testing
-            List<string> testList = new List<string>() { "mahsaap" };
-            var user = await API.Users.v5.GetUserByNameAsync("mahsaap");
-            var testUser = await API.Channels.v5.GetChannelByIDAsync(user.Matches[0].Id);
-            _chansID.Add(testUser.Id);
-            _chansName.Add(testUser.Name);
-            Monitor.SetStreamsByUserId(_chansID);
-        }
-
-        public async Task UpdateMonitorAsync()
-        {
-            Monitor.StopService();
-            _chansName.Clear();
-            _chansID.Clear();
-            await SetCastersAsync();
-            Monitor.StartService();
-        }
-
-
-        private async Task SetupEmbedMessageAsync(EmbedBuilder eb, OnStreamOnlineArgs e, TwitchLib.Api.Models.v5.Streams.Stream s, string _twitterURL)
-        {
-            string twitchURL = "";
-            string channelID = "";
-            string channelName = "";
-            string status = "";
-            string game = "";
-
-            if (e != null)
+            try
             {
-                twitchURL = e.Stream.Channel.Url;
-                channelID = e.Stream.Channel.Id;
-                channelName = e.Stream.Channel.DisplayName;
-                status = e.Stream.Channel.Status;
-                game = e.Stream.Channel.Game;
-            }
-            else if (s != null)
-            {
-                twitchURL = s.Channel.Url;
-                channelID = s.Channel.Id;
-                channelName = s.Channel.DisplayName;
-                status = s.Channel.Status;
-                game = s.Channel.Game;
-            }
-            else return;
-            if (Setup.DiscordAnnounceChannel == 0) return;
-            if (_client.ConnectionState == ConnectionState.Connected)
-            {
-                string here = "";
-                if (_onlineTime.AddSeconds(30) <= DateTime.Now) here = "@here ";
-                if (_twitterURL.Length > 1) here += $"\nTwitter (*<{_twitterURL}>*)"; else here += " ";
-                here += $"\nTwitch (*{twitchURL}*)";
-                here = here.Insert(0, $"**{channelName} is live!** ");
-
-                await SendEmbedAsync(Setup.DiscordAnnounceChannel, eb, _liveEmbeds, here, channelID, channelName, status, game);
-
-                if (sepServerList.ContainsKey(channelName.ToLower()))
+                LastTeamCheck = DateTime.Now;
+                if (Version.Build == BuildType.WYK.Value)
                 {
-                    await Task.Delay(500);
-                    await SendEmbedAsync(sepServerList[channelName.ToLower()], eb, _sepliveEmbeds, here, channelID, channelName, status, game);
+                    Team team = await API.V5.Teams.GetTeamAsync("wyktv");
+
+                    foreach (Channel user in team.Users)
+                    {
+                        MonitoredChannels.Add(user.DisplayName, user.Id);
+                    }
+                }
+                else if (Version.Build == BuildType.OBG.Value)
+                {
+                    var chan = await API.Helix.Users.GetUsersAsync(logins: new List<string> { "overboredgaming" });
+                    MonitoredChannels.Add(chan.Users[0].DisplayName, chan.Users[0].Id);
+                }
+                Monitor.SetChannelsById(MonitoredChannels.Values.ToList());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+
+        public async Task<bool> UpdateMonitorAsync(string channel = null)
+        {
+            if (channel == null) {
+                Monitor.Stop();
+                MonitoredChannels.Clear();
+                await SetCastersAsync();
+                Monitor.Start();
+                return true;
+            }
+            else
+            {
+                try
+                {
+                    var user = await API.V5.Users.GetUserByNameAsync(channel);
+                    string channelID = user.Matches[0].Id;
+
+                    var ee = await API.V5.Streams.GetStreamByUserAsync(channelID);
+                    if (_liveEmbeds.ContainsKey(channelID))
+                    {
+                        if (_client.ConnectionState == ConnectionState.Connected)
+                        {
+                            if (Setup.DiscordAnnounceChannel == 0) return false;
+                            var msg = _liveEmbeds[channelID];
+
+                            EmbedBuilder eb = SetupLiveEmbed($":link: {ee.Stream.Channel.DisplayName}", ee.Stream.Channel.Status, ee.Stream.Channel.Game,
+                                ee.Stream.Preview.Medium + Guid.NewGuid().ToString(), ee.Stream.Channel.Logo, @"https://www.twitch.tv/" + ee.Stream.Channel.Name, ee.Stream.Viewers);
+
+                            await msg.Item1.ModifyAsync(x => x.Embed = eb.Build());
+                            _liveEmbeds[channelID] = new Tuple<RestUserMessage, string, string,int>(msg.Item1, ee.Stream.Channel.Status, ee.Stream.Channel.Game, ee.Stream.Viewers);
+
+                            Console.WriteLine($"{Globals.CurrentTime} Monitor     Stream {ee.Stream.Channel.DisplayName} updated");
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                    return false;
                 }
             }
         }
 
-        private async Task SendEmbedAsync(ulong id, EmbedBuilder eb, ConcurrentDictionary<string, Tuple<RestUserMessage, string, string>> lst, string here, string channelID, string channelName, string status, string game)
-        {
-            var chan = _client.GetChannel(id) as SocketTextChannel;
-            RestUserMessage msg = await chan.SendMessageAsync(here, embed: eb.Build());
-            if (lst.ContainsKey(channelID)) lst[channelID] = new Tuple<RestUserMessage, string, string>(msg, status, game);
-            else lst.TryAdd(channelID, new Tuple<RestUserMessage, string, string>(msg, status, game));
-        }
-
-
-        private async Task TweetMessageAsync(string text, string url, string channel)
+        public async Task<bool> RemoveLiveEmbedAsync(string channel)
         {
             try
             {
-                WebClient webClient = new WebClient();
-                byte[] image = webClient.DownloadData(url);
-                var publishOptions = new PublishTweetOptionalParameters();
-                publishOptions.MediaBinaries.Add(image);
-                var twitterObject = await TweetAsync.PublishTweet(text, publishOptions);
-                _twitterURL = twitterObject.Url;
+                var user = await API.V5.Users.GetUserByNameAsync(channel);
+                string channelID = user.Matches[0].Id;
+                var ee = await API.V5.Channels.GetChannelByIDAsync(channelID);
+                Console.WriteLine($"{Globals.CurrentTime} Monitor     {ee.DisplayName} was removed manually.");
 
+                if (_liveEmbeds.ContainsKey(channelID))
+                {
+                    await Task.Delay(250);
+                    RestUserMessage embed = _liveEmbeds[channelID].Item1;
+                    if (_client.ConnectionState == ConnectionState.Connected)
+                        await embed.DeleteAsync();
+                    _liveEmbeds.TryRemove(channelID, out Tuple<RestUserMessage, string, string, int> outResult);
+                    Console.WriteLine($"{Globals.CurrentTime} Monitor     TryParse OutResult: {outResult}");
+                    return true;
+                }
+                return false;
             }
             catch (Exception ex)
             {
-                var mahsaap = _client.GetUser(Constants.Discord.Mahsaap) as IUser;
-                await mahsaap.SendMessageAsync(ex.Message + "\n" + ex.StackTrace);
+                Console.WriteLine(ex.ToString());
+                return false;
             }
+
         }
 
-        private static TimeSpan GetUptime()
-            => (DateTime.Now - Process.GetCurrentProcess().StartTime);
-
-        private string FindTwitterTag(string channel)
+        private async Task SetupEmbedMessageAsync(EmbedBuilder eb, TwitchLib.Api.V5.Models.Streams.StreamByUser e, TwitchLib.Api.V5.Models.Streams.Stream s)
         {
-            switch (channel.ToLower())
+            try
             {
-                case "brotatoe":
-                    return "@JayBrotatoe ";
-                case "domesticdan":
-                    return "@DomesticDan ";
-                case "farringtonempire":
-                    return "@OfficialFarEm ";
-                case "firecrow":
-                    return "@FirecrowTV ";
-                case "goobers515":
-                    return "@Goobers515 ";
-                case "inexpensivegamer":
-                    return "@InexpensiveGamR ";
-                case "littlesiha":
-                    return "@littlesiha ";
-                case "overboredgaming":
-                    return "@OverBoredGaming ";
-                case "robanddan":
-                    return "@RobAndDan ";
-                case "romcomm":
-                    return "@Romcommm ";
-                case "themavshow":
-                    return "@TheMavShow ";
-                default:
-                    return "";
+                if (s == null && e == null || eb == null) return;
+                TwitchLib.Api.V5.Models.Streams.StreamByUser ee = null;
+                if (e != null)
+                {
+                    ee = await API.V5.Streams.GetStreamByUserAsync(e.Stream.Channel.Id);
+                }
+
+                string twitchURL = ee?.Stream.Channel.Url ?? s?.Channel.Url;
+                string channelID = ee?.Stream.Channel.Id ?? s?.Channel.Id;
+                string channelName = ee?.Stream.Channel.DisplayName ?? s?.Channel.DisplayName;
+                string status = ee?.Stream.Channel.Status ?? s?.Channel.Status;
+                string game = ee?.Stream.Channel.Game ?? s?.Channel.Game;
+                int vCount = ee?.Stream.Viewers ?? s.Viewers;
+
+                if (Setup.DiscordAnnounceChannel == 0) return;
+                if (_client.ConnectionState == ConnectionState.Connected)
+                {
+                    string here = "";
+                    if (Version.Build == BuildType.OBG.Value)
+                    {
+                        here += $"**Yes, {channelName} is live!**\n" +
+                            $"Twitch(*{twitchURL}*)";
+                    }
+                    else
+                    {
+                        if (_botOnlineTime.AddSeconds(30) <= DateTime.Now) here = "@here ";
+                        here += $"\nTwitch (*{twitchURL}*)";
+                        here = here.Insert(0, $"**{channelName} is live!** ");
+                    }
+
+                    await SendEmbedAsync(Setup.DiscordAnnounceChannel, eb, here, channelID, status, game, vCount);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
+
+        private async Task SendEmbedAsync(ulong id, EmbedBuilder eb, string here, string channelID, string status, string game, int vCount)
+        {
+            var chan = _client.GetChannel(id) as SocketTextChannel;
+            RestUserMessage msg = await chan.SendMessageAsync(here, embed: eb.Build());
+            if (_liveEmbeds.ContainsKey(channelID)) _liveEmbeds[channelID] = new Tuple<RestUserMessage, string, string, int>(msg, status, game, vCount);
+            else _liveEmbeds.TryAdd(channelID, new Tuple<RestUserMessage, string, string, int>(msg, status, game, vCount));
+            await Task.CompletedTask;
+        }
+
+        //private async Task<string> ImageCheck(string url)
+        //{
+        //    WebClient webClient = new WebClient();
+        //    try
+        //    {
+        //        byte[] image = webClient.DownloadData(url);
+
+        //        for (int i = 0; i < Twitch.TwitchPinkScreenRetryAttempts; i++)
+        //        {
+        //            byte[] hash;
+        //            using (var sha256 = System.Security.Cryptography.SHA256.Create())
+        //            {
+        //                hash = sha256.ComputeHash(image);
+        //            }
+        //            if (hash.SequenceEqual(Twitch.TwitchPinkScreenChecksum))
+        //            {
+        //                //pink screen detected. Lets sleep for X seconds and try again.
+        //                Console.WriteLine($"{DateTime.Now:HH:MM:ss} Twitch       Detected Pink Screen for {url}, trying again in {Twitch.TwitchPinkScreenRetryDelay}, attempt {i + 1} out of {Twitch.TwitchPinkScreenRetryAttempts}");
+        //                await Task.Delay(Twitch.TwitchPinkScreenRetryDelay);
+        //                image = webClient.DownloadData(url);
+        //                image = webClient.DownloadData(url);
+        //            }
+        //            else
+        //            {
+        //                //not a pink screen. Break out of loop
+        //                return url;
+        //            }
+        //        }
+        //        return url;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        var mahsaap = _client.GetUser(DiscordIDs.Mahsaap) as IUser;
+        //        await mahsaap.SendMessageAsync(ex.Message + "\n" + ex.StackTrace);
+        //        //cannot return null - code checks for length > 1
+        //        return "";
+        //    }
+        //    finally
+        //    {
+        //        webClient.Dispose();
+        //    }
+        //}
     }
 }

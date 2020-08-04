@@ -1,12 +1,14 @@
 ﻿using BluBotCore.Other;
+using BluBotCore.Preconditions;
 using Discord.Commands;
 using Discord.WebSocket;
 using System.Threading.Tasks;
 
-namespace BluBotCore.Modules
+namespace BluBotCore.Modules.Commands
 {
     [Name("WYK")]
     [Group("wyk")]
+    [RequireWYKBuild]
     public class WYKCmds : ModuleBase<SocketCommandContext>
     {
         [Command("social")]
@@ -50,8 +52,8 @@ namespace BluBotCore.Modules
         public async Task WYKStreamers()
         {
             string result = "**Would You Kindly - Team**\n";
-            var staff = Context.Guild.GetRole(Setup.DiscordWYKTVRole).Members;
-            foreach (SocketGuildUser user in staff)
+            var team = Context.Guild.GetRole(Setup.DiscordWYKTVRole).Members;
+            foreach (SocketGuildUser user in team)
             {
                 result += $"*{user.Username}*\n";
             }
