@@ -14,8 +14,8 @@ namespace BluBotCore.Preconditions
         private readonly static List<ulong> _requiredRoleId = new List<ulong>(
             new ulong[] { Setup.DiscordStaffRole , Setup.DiscordWYKTVRole });
         /// <summary>Required user w/o role for admin commands</summary>
-        private readonly static List<ulong> _requiredUserID = new List<ulong>(
-            new ulong[] { DiscordIDs.Mahsaap, DiscordIDs.Space });
+        // private readonly static List<ulong> _requiredUserID = new List<ulong>(
+        //     new ulong[] { DiscordIDs.Mahsaap, DiscordIDs.Space });
 
         public RequireRoleOrID()
         {
@@ -29,11 +29,7 @@ namespace BluBotCore.Preconditions
         /// <returns>PreconditionResult</returns>
         public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
         {
-            if (_requiredUserID.Contains(context.User.Id))
-            {
-                return Task.FromResult(PreconditionResult.FromSuccess());
-            }
-            else if (context.User is IGuildUser && _requiredRoleId.Any(x => (context.User as IGuildUser).RoleIds.Contains(x)))
+            if (context.User is IGuildUser && _requiredRoleId.Any(x => (context.User as IGuildUser).RoleIds.Contains(x)))
             {
                 return Task.FromResult(PreconditionResult.FromSuccess());
             }

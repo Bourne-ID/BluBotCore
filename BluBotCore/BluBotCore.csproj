@@ -4,34 +4,34 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <LangVersion>latest</LangVersion>
+    <Version>1.19.10</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <RuntimeIdentifier>win10-x64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win10-x64;osx.10.11-x64;ubuntu.16.04-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <!--<RuntimeIdentifier>ubuntu.16.04-x64</RuntimeIdentifier>-->
-    <RuntimeIdentifier>win10-x64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win10-x64;osx.10.11-x64;ubuntu.16.04-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Addons.EmojiTools" Version="2.0.2" />
     <PackageReference Include="Discord.Addons.Interactive" Version="2.0.0" />
     <PackageReference Include="Discord.Addons.Preconditions" Version="2.2.0-dev3" />
-    <PackageReference Include="Discord.Net" Version="2.3.0-dev-20200718.1" />
-    <PackageReference Include="Discord.Net.Commands" Version="2.3.0-dev-20200718.1" />
-    <PackageReference Include="Discord.Net.Core" Version="2.3.0-dev-20200718.1" />
-    <PackageReference Include="Discord.Net.Providers.WS4Net" Version="2.3.0-dev-20200718.1" />
-    <PackageReference Include="Discord.Net.Webhook" Version="2.3.0-dev-20200718.1" />
-    <PackageReference Include="Discord.Net.WebSocket" Version="2.3.0-dev-20200718.1" />
+    <PackageReference Include="Discord.Net" Version="2.2.0" />
+    <PackageReference Include="Discord.Net.Commands" Version="2.2.0" />
+    <PackageReference Include="Discord.Net.Core" Version="2.2.0" />
+    <PackageReference Include="Discord.Net.Providers.WS4Net" Version="2.2.0" />
+    <PackageReference Include="Discord.Net.Webhook" Version="2.2.0" />
+    <PackageReference Include="Discord.Net.WebSocket" Version="2.2.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="3.1.6" />
     <PackageReference Include="SteamStoreQuery" Version="1.0.4" />
     <PackageReference Include="StrawPollNET" Version="1.0.2" />
     <PackageReference Include="System.Security.Cryptography.Algorithms" Version="4.3.1" />
     <PackageReference Include="TwitchLib.Api" Version="3.1.4-CI-20200626-19" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version-="3.1.6" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version-="3.1.6" />
   </ItemGroup>
-
   <ItemGroup>
     <None Update="setup.txt">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>

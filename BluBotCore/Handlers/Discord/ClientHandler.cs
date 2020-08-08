@@ -1,5 +1,4 @@
-﻿using BluBotCore.Global;
-using Discord;
+﻿using Discord;
 using Discord.WebSocket;
 using System;
 using System.Collections.Concurrent;
@@ -24,14 +23,7 @@ namespace BluBotCore.Handlers.Discord
         {
             LoadCustomCmdFile();
             await _client.SetStatusAsync(UserStatus.Online);
-            if (Version.Build == BuildType.WYK.Value)
-            {
-                await _client.SetGameAsync("WYKTV Monitoring");
-            }
-            else if (Version.Build == BuildType.OBG.Value)
-            {
-                await _client.SetGameAsync("is OBG Live?");
-            }
+            await _client.SetGameAsync("WYKTV Monitoring");
         }
 
         private void LoadCustomCmdFile()

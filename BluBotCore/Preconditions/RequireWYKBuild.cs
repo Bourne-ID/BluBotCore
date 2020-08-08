@@ -1,5 +1,4 @@
-﻿using BluBotCore.Global;
-using BluBotCore.Other;
+﻿using BluBotCore.Other;
 using Discord;
 using Discord.Commands;
 using System;
@@ -23,12 +22,7 @@ namespace BluBotCore.Preconditions
         /// <returns>PreconditionResult</returns>
         public override Task<PreconditionResult> CheckPermissionsAsync(ICommandContext context, CommandInfo command, IServiceProvider services)
         {
-            if (Version.Build == BuildType.WYK.Value)
-            {
-                return Task.FromResult(PreconditionResult.FromSuccess());
-            }
-            else
-                return Task.FromResult(PreconditionResult.FromError(""));
+            return Task.FromResult(PreconditionResult.FromSuccess());
         }
     }
 }

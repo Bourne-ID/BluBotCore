@@ -1,5 +1,6 @@
 
 .vs/
+.vscode/
 BluBotCore/bin/
 BluBotCore/obj/
 BluBotCore/Ignore/

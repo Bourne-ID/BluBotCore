@@ -43,7 +43,7 @@ namespace BluBotCore.Handlers.Discord
                 }
 
                 if ((message.Author as IGuildUser).RoleIds.Contains(Setup.DiscordStaffRole) ||
-                (message.Author as IGuildUser).RoleIds.Contains(Setup.DiscordWYKTVRole) || (message.Author.Id == DiscordIDs.Mahsaap))
+                    (message.Author as IGuildUser).RoleIds.Contains(Setup.DiscordWYKTVRole) )
                 {
                     //Add Check
                     if (command == "add")

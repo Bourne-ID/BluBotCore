@@ -1,4 +1,5 @@
 ﻿using BluBotCore.Services;
+using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 
 namespace BluBotCore
@@ -11,4 +12,5 @@ namespace BluBotCore
             await _discord.MainAsync();
         }
     }
+
 }

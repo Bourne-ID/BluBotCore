@@ -23,7 +23,7 @@ namespace BluBotCore.Modules.Commands
         [Command("version")]
         public async Task VersionAsync()
         {
-            await ReplyAsync($"V{Version.Major}.{Version.Minor} > {Version.Build}");
+            await ReplyAsync($"{Version.Number}");
         }
 
         //End application - ConsoleApp
@@ -119,13 +119,13 @@ namespace BluBotCore.Modules.Commands
             eb.AddField(x =>
             {
                 x.Name = "**Version**";
-                x.Value = $"V{Version.Major}.{Version.Minor}";
+                x.Value = $"{Version.Number}";
                 x.IsInline = true;
             });
             eb.AddField(x =>
             {
                 x.Name = "**Variant**";
-                x.Value = $"{Version.Build}";
+                x.Value = $"AzureDevops Build";
                 x.IsInline = true;
             });
             eb.AddField(x =>
@@ -133,9 +133,9 @@ namespace BluBotCore.Modules.Commands
                 x.Name = "**Libraries**";
                 x.Value = "" +
                 $"Discord.Net ({DiscordConfig.Version})\n" +
-                "TwitchLib.API 3.1.4\n" +
-                "StrawPollNet 1.0.2\n" +
-                "SteamStoreQuery 1.0.4";
+                $"TwitchLib.API {System.Reflection.Assembly.GetAssembly(typeof(TwitchLib.Api.TwitchAPI)).GetName().Version}\n" +
+                $"StrawPollNet {System.Reflection.Assembly.GetAssembly(typeof(StrawPollNET.API)).GetName().Version}\n" +
+                $"SteamStoreQuery {System.Reflection.Assembly.GetAssembly(typeof(SteamStoreQuery.Query)).GetName().Version}";
                 x.IsInline = false;
             });
             eb.AddField(x =>
