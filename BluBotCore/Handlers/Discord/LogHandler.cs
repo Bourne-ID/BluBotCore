@@ -44,15 +44,8 @@ namespace BluBotCore.Handlers.Discord
                     break;
             }
 
-            if (msg.Severity == LogSeverity.Error || msg.Severity == LogSeverity.Warning || msg.Severity == LogSeverity.Critical)
-            {
-                string msge = msg.ToString();
-                if (msg.Message != null && msg.Exception != null && msg.Exception.InnerException != null) {
-                    var mahsaap = _client.GetUser(88798728948809728) as IUser;
-                    await mahsaap.SendMessageAsync(msge);
-                }
-            }
             Console.WriteLine(msg.ToString());
+            Console.WriteLine(msg.Message);
             Console.ResetColor();
             //return Task.CompletedTask;
         }

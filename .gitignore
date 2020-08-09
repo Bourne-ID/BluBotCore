@@ -8,3 +8,6 @@ BluBotCore/init.txt
 BluBotCore/setup.txt
 BluBotCore/BluBotCore.csproj.user
 BluBotCore/Properties/
+.DS_Store
+BluBotCore/.DS_Store
+BluBotCore/customcmds.txt

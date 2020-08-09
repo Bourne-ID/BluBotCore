@@ -15,7 +15,6 @@ namespace BluBotCore.Other
                 {
                     throw new Exception($"Set environment variable {ENV_VAR} to set the application password");
                 }
-                Console.WriteLine(password.PadLeft(32, 'a').Substring(0,32));
                 return Encoding.ASCII.GetBytes(password.PadLeft(32, 'a').Substring(0,32));
             }
         }

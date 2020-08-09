@@ -40,8 +40,6 @@ namespace BluBotCore.Handlers.Discord
                 //await context.Channel.SendMessageAsync(result.ErrorReason);
                 Console.WriteLine($"User:{context.User.Username}#{context.User.Discriminator}," +
                     $"Id:{context.User.Id},Message:{context.Message.Content},Error:{result.ErrorReason}");
-                var mahsaap = _client.GetUser(88798728948809728) as IUser;
-                await mahsaap.SendMessageAsync($"Id:{context.User.Id},Message:{context.Message.Content},Error:{result.ErrorReason}");
             }
         }
     }

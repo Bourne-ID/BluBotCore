@@ -157,8 +157,6 @@ namespace BluBotCore.Modules.Commands
             {
                 guildsStr += $"**{guild.Name}** ({guild.Id})\n" +
                     $"- Members ({guild.MemberCount})\n" +
-                    $"- Channels ({guild.Channels.Count})>(V{guild.VoiceChannels.Count})(T{guild.TextChannels.Count})\n" +
-                    $"- Roles = {guild.Roles.Count}\n" +
                     $"- Owner = {guild.Owner}({guild.OwnerId})\n";
             }
             eb.AddField(x =>
