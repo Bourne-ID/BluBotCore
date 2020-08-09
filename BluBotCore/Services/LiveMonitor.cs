@@ -67,7 +67,7 @@ namespace BluBotCore.Services
             }
             try
             {
-                API = new TwitchAPI(new LoggerFactory());
+                API = new TwitchAPI(ApplicationLogging.LoggerFactory);
                 try
                 {
                     // Set Credentials in Twitch API Config.
