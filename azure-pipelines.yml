@@ -7,7 +7,7 @@ trigger:
 - master
 
 pool:
-  vmImage: 'windows-latest'
+  vmImage: 'ubuntu-16.04'
 
 variables:
   solution: '**/*.sln'
@@ -24,6 +24,7 @@ steps:
 - task: DotNetCoreCLI@2
   inputs:
     command: 'build' # Options: build, push, pack, publish, restore, run, test, custom
+    arguments: "--configuration Release"
     #publishWebProjects: true # Required when command == Publish
     #projects: # Optional
     #custom: # Required when command == Custom
