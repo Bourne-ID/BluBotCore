@@ -62,7 +62,7 @@ steps:
 
 - task: ArchiveFiles@2
   inputs:
-    rootFolderOrFile: '$(Build.StagingDirectory)/Release/netcoreapp3.1'
+    rootFolderOrFile: '$(Build.Repository.LocalPath)/BluBotCore/bin/$(buildConfiguration)/netcoreapp3.1'
     includeRootFolder: true
     archiveType: 'zip'
     archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
