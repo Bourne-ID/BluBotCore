@@ -7,12 +7,12 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 
 
-namespace BluBotCore.Modules
+namespace BluBotCore.Modules.Commands
 {
     [Name("Public")]
     public class PublicCmds : ModuleBase<SocketCommandContext>
     {
-        private Random rnd = new Random();
+        private readonly Random rnd = new Random();
 
         [Command("hug")]
         [Summary("Random Hug image or Hug a target.")]
@@ -40,28 +40,12 @@ namespace BluBotCore.Modules
             await ReplyAsync("https://support.discordapp.com/hc/en-us/articles/360000291932-How-to-Properly-Report-Issues-to-Trust-Safety");
         }
 
-        //[Command("choose"), Summary("Choose Random from given")]
-        //[Alias("pick")]
-        //public async Task ChooseAsync(string entry)
-        //{
-        //    List<string> entries = entry.Split(',').ToList();
-        //    int r = rnd.Next(entries.Count);
-        //    await ReplyAsync($"I choose `{entries[r].Trim()}`");
-        //}
-
-        //[Command("weather")]
-        //public async Task WeatherAsync([Remainder]string input)
-        //{
-        //    var entries = input.Split(',');
-        //    await Task.CompletedTask;
-        //}
-
         [Command("cflip")]
         [Alias("coinflip")]
         [Summary("Flip a coin.")]
         public async Task CoinFlipAsync()
         {
-            Coin choice = 0;
+            Coin choice;
             int r = rnd.Next(2);
             if (r == 0) choice = Coin.Heads;
             else choice = Coin.Tails;
@@ -77,9 +61,5 @@ namespace BluBotCore.Modules
                 @"<https://steamstat.us/>" + "\n" +
                 @"<https://twitchstatus.com/>");
         }
-
-        private static string GetUptime()
-            => (DateTime.Now - Process.GetCurrentProcess().StartTime).ToString(@"dd\.hh\:mm\:ss");
-        }
-
+    }
 }

@@ -1,5 +1,4 @@
-﻿using BluBotCore.Handlers;
-using BluBotCore.Other;
+﻿using BluBotCore.Other;
 using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
@@ -7,7 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace BluBotCore.Modules
+namespace BluBotCore.Modules.Commands
 {
     [Name("Owner")]
     [RequireOwner]
@@ -38,21 +37,6 @@ namespace BluBotCore.Modules
                 Setup.DiscordWYKTVRole.ToString()
             };
             File.WriteAllLines(filename, tempLst);
-        }
-
-        [Command("egg")]
-        public async Task EggAsync()
-        {
-            EasterEggs.easterEggEnable = !EasterEggs.easterEggEnable;
-            await Task.CompletedTask;
-        }
-
-        [Command("encrypt")]
-        [RequireContext(ContextType.DM)]
-        public async Task VerifyAsync(string entry)
-        {
-            string result = AES.Encrypt(entry);
-            await ReplyAsync(result);
         }
 
         [Command("decrypt")]
