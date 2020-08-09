@@ -59,7 +59,15 @@ steps:
     #verbosityPack: 'Detailed' # Options: -, quiet, minimal, normal, detailed, diagnostic
     workingDirectory:
 
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(Build.BinariesDirectory)'
+    includeRootFolder: true
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+    replaceExistingArchive: true
+
 - task: PublishPipelineArtifact@1
   inputs:
-    targetPath: $(System.DefaultWorkingDirectory)/bin/WebApp
-    artifactName: WebApp
+    targetPath: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+    artifactName: bot.zip
