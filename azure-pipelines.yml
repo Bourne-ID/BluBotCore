@@ -63,4 +63,4 @@ steps:
 - task: PublishPipelineArtifact@1
   inputs:
     targetPath: '$(Build.Repository.LocalPath)/BluBotCore/bin/$(buildConfiguration)/netcoreapp3.1'
-    artifactName: bot.zip
+    artifactName: bot
